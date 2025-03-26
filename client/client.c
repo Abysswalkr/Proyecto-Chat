@@ -1,18 +1,3 @@
-/*
-  client.c - Componente de cliente para el proyecto de chat.
-
-  Funcionalidades:
-  - Conexión al servidor y registro del usuario.
-  - Interfaz de comandos por consola para enviar mensajes y comandos.
-  - Envío de mensajes de broadcast y mensajes directos (DM).
-  - Solicitud de lista de usuarios conectados e información de un usuario.
-  - Cambio de estado (ACTIVO, OCUPADO, INACTIVO).
-  - Recepción de mensajes del servidor en un hilo separado.
-  - Desconexión limpia, incluyendo manejo de la señal Ctrl+C (SIGINT).
-
-  Para compilar: gcc -o client client.c -lcjson -lpthread
-*/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
