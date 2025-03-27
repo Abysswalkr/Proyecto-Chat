@@ -1,13 +1,33 @@
+#ifdef _WIN32
+  // Definir versión mínima de Windows para habilitar inet_ntop
+  #ifndef _WIN32_WINNT
+    #define _WIN32_WINNT 0x0600
+  #endif
+
+  #include <winsock2.h>
+  #include <ws2tcpip.h>
+  #include <windows.h>
+  #include <pthread.h>   // Necesario si usas pthreads-win32
+  #pragma comment(lib, "ws2_32.lib")
+
+  // Redefinir funciones POSIX a las equivalentes de Win32
+  #define close(fd) closesocket(fd)
+  #define sleep(x) Sleep((x)*1000)
+
+#else
+  // En Linux/Unix, las cabeceras POSIX normales
+  #include <unistd.h>
+  #include <pthread.h>
+  #include <sys/socket.h>
+  #include <netinet/in.h>
+  #include <arpa/inet.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <cjson/cJSON.h>
 #include <time.h>
+#include "cJSON.h"  // Asegúrate de que cJSON.h esté en tu proyecto
 
 #define MAX_CLIENTS 100
 #define BUFFER_SIZE 2048
@@ -45,6 +65,15 @@ void get_user_info(const char *username, int client_socket);
 void change_user_status(const char *username, int status);
 
 int main(int argc, char *argv[]) {
+#ifdef _WIN32
+    // Inicializar WinSock
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
+        fprintf(stderr, "Error: WSAStartup() falló\n");
+        exit(EXIT_FAILURE);
+    }
+#endif
+
     int server_fd, client_socket;
     struct sockaddr_in address;
     int opt = 1;
@@ -64,7 +93,7 @@ int main(int argc, char *argv[]) {
     }
     
     // Configurar socket
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt))) {
         perror("Error en setsockopt");
         exit(EXIT_FAILURE);
     }
@@ -117,25 +146,32 @@ int main(int argc, char *argv[]) {
         }
     }
     
+    // Cerrar el socket del servidor
+    close(server_fd);
+
+#ifdef _WIN32
+    WSACleanup();
+#endif
+
     return 0;
 }
 
 // Función para manejar conexiones de clientes
 void *handle_client(void *arg) {
     client_t *client = (client_t *)arg;
-    int socket = client->socket;
+    int socket_fd = client->socket;
     struct sockaddr_in address = client->address;
     char buffer[BUFFER_SIZE] = {0};
     char ip[INET_ADDRSTRLEN];
-    
-    // Obtener IP del cliente
+
+    // Obtener IP del cliente (inet_ntop está habilitado con _WIN32_WINNT >= 0x0600)
     inet_ntop(AF_INET, &(address.sin_addr), ip, INET_ADDRSTRLEN);
     printf("Nueva conexión desde %s:%d\n", ip, ntohs(address.sin_port));
     
     free(client);
     
     // Leer mensajes del cliente
-    while (recv(socket, buffer, BUFFER_SIZE, 0) > 0) {
+    while (recv(socket_fd, buffer, BUFFER_SIZE, 0) > 0) {
         // Procesar mensaje JSON
         cJSON *json = cJSON_Parse(buffer);
         if (json == NULL) {
@@ -154,10 +190,10 @@ void *handle_client(void *arg) {
                 cJSON *usuario = cJSON_GetObjectItemCaseSensitive(json, "usuario");
                 cJSON *direccionIP = cJSON_GetObjectItemCaseSensitive(json, "direccionIP");
                 
-                if (usuario != NULL && cJSON_IsString(usuario) && 
+                if (usuario != NULL && cJSON_IsString(usuario) &&
                     direccionIP != NULL && cJSON_IsString(direccionIP)) {
                     
-                    int result = register_user(usuario->valuestring, ip, socket);
+                    int result = register_user(usuario->valuestring, ip, socket_fd);
                     
                     // Responder al cliente
                     cJSON *response = cJSON_CreateObject();
@@ -169,7 +205,7 @@ void *handle_client(void *arg) {
                     }
                     
                     char *response_str = cJSON_Print(response);
-                    send(socket, response_str, strlen(response_str), 0);
+                    send(socket_fd, response_str, strlen(response_str), 0);
                     
                     free(response_str);
                     cJSON_Delete(response);
@@ -187,7 +223,7 @@ void *handle_client(void *arg) {
                     cJSON_AddStringToObject(response, "respuesta", "OK");
                     
                     char *response_str = cJSON_Print(response);
-                    send(socket, response_str, strlen(response_str), 0);
+                    send(socket_fd, response_str, strlen(response_str), 0);
                     
                     free(response_str);
                     cJSON_Delete(response);
@@ -198,7 +234,7 @@ void *handle_client(void *arg) {
                 cJSON *usuario = cJSON_GetObjectItemCaseSensitive(json, "usuario");
                 cJSON *estado = cJSON_GetObjectItemCaseSensitive(json, "estado");
                 
-                if (usuario != NULL && cJSON_IsString(usuario) && 
+                if (usuario != NULL && cJSON_IsString(usuario) &&
                     estado != NULL && cJSON_IsString(estado)) {
                     
                     int status_code;
@@ -220,7 +256,7 @@ void *handle_client(void *arg) {
                         cJSON_AddStringToObject(response, "respuesta", "OK");
                         
                         char *response_str = cJSON_Print(response);
-                        send(socket, response_str, strlen(response_str), 0);
+                        send(socket_fd, response_str, strlen(response_str), 0);
                         
                         free(response_str);
                         cJSON_Delete(response);
@@ -231,7 +267,7 @@ void *handle_client(void *arg) {
                         cJSON_AddStringToObject(response, "razon", "ESTADO_INVALIDO");
                         
                         char *response_str = cJSON_Print(response);
-                        send(socket, response_str, strlen(response_str), 0);
+                        send(socket_fd, response_str, strlen(response_str), 0);
                         
                         free(response_str);
                         cJSON_Delete(response);
@@ -243,7 +279,7 @@ void *handle_client(void *arg) {
                 cJSON *usuario = cJSON_GetObjectItemCaseSensitive(json, "usuario");
                 
                 if (usuario != NULL && cJSON_IsString(usuario)) {
-                    get_user_info(usuario->valuestring, socket);
+                    get_user_info(usuario->valuestring, socket_fd);
                 }
             }
         } else if (accion != NULL && cJSON_IsString(accion)) {
@@ -252,7 +288,7 @@ void *handle_client(void *arg) {
                 cJSON *emisor = cJSON_GetObjectItemCaseSensitive(json, "nombre_emisor");
                 cJSON *mensaje = cJSON_GetObjectItemCaseSensitive(json, "mensaje");
                 
-                if (emisor != NULL && cJSON_IsString(emisor) && 
+                if (emisor != NULL && cJSON_IsString(emisor) &&
                     mensaje != NULL && cJSON_IsString(mensaje)) {
                     
                     broadcast_message(emisor->valuestring, mensaje->valuestring);
@@ -274,8 +310,8 @@ void *handle_client(void *arg) {
                 cJSON *destinatario = cJSON_GetObjectItemCaseSensitive(json, "nombre_destinatario");
                 cJSON *mensaje = cJSON_GetObjectItemCaseSensitive(json, "mensaje");
                 
-                if (emisor != NULL && cJSON_IsString(emisor) && 
-                    destinatario != NULL && cJSON_IsString(destinatario) && 
+                if (emisor != NULL && cJSON_IsString(emisor) &&
+                    destinatario != NULL && cJSON_IsString(destinatario) &&
                     mensaje != NULL && cJSON_IsString(mensaje)) {
                     
                     send_direct_message(emisor->valuestring, destinatario->valuestring, mensaje->valuestring);
@@ -293,7 +329,7 @@ void *handle_client(void *arg) {
             }
             // Lista de usuarios
             else if (strcmp(accion->valuestring, "LISTA") == 0) {
-                list_users(socket);
+                list_users(socket_fd);
             }
         }
         
@@ -308,7 +344,7 @@ cleanup:
     // Buscar y eliminar usuario por socket
     pthread_mutex_lock(&users_mutex);
     for (int i = 0; i < user_count; i++) {
-        if (users[i].socket == socket) {
+        if (users[i].socket == socket_fd) {
             printf("Eliminando usuario: %s\n", users[i].username);
             
             // Mover el último usuario a esta posición
@@ -323,12 +359,13 @@ cleanup:
     }
     pthread_mutex_unlock(&users_mutex);
     
-    close(socket);
+    close(socket_fd);
     return NULL;
 }
 
 // Función para verificar inactividad
 void *check_inactivity(void *arg) {
+    (void)arg;
     while (1) {
         sleep(60); // Verificar cada minuto
         

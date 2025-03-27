@@ -1,13 +1,32 @@
+#ifdef _WIN32
+  // Definir versión mínima de Windows (para inet_pton)
+  #ifndef _WIN32_WINNT
+    #define _WIN32_WINNT 0x0600
+  #endif
+
+  #include <winsock2.h>
+  #include <ws2tcpip.h>
+  #include <windows.h>
+  #include <pthread.h>   // pthreads-win32 o similar
+  #pragma comment(lib, "ws2_32.lib")
+
+  // Redefinir close() → closesocket()
+  #define close(fd) closesocket(fd)
+
+#else
+  // En Linux/Unix
+  #include <unistd.h>
+  #include <pthread.h>
+  #include <sys/socket.h>
+  #include <netinet/in.h>
+  #include <arpa/inet.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <cjson/cJSON.h>
 #include <signal.h>
+#include "cJSON.h"  // Asegúrate de que cJSON.h esté disponible (o usa <cjson/cJSON.h> si lo instalaste así)
 
 #define BUFFER_SIZE 2048
 
@@ -31,6 +50,15 @@ void handle_command(const char *input);
 void sigint_handler(int sig);
 
 int main(int argc, char *argv[]) {
+#ifdef _WIN32
+    // Inicializar WinSock
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
+        fprintf(stderr, "Error: WSAStartup() falló\n");
+        exit(EXIT_FAILURE);
+    }
+#endif
+
     struct sockaddr_in serv_addr;
     pthread_t recv_thread;
     char buffer[BUFFER_SIZE];
@@ -41,6 +69,9 @@ int main(int argc, char *argv[]) {
     // Verificar argumentos: <nombredeusuario> <IPdelservidor> <puertodelservidor>
     if (argc != 4) {
         printf("Uso: %s <nombredeusuario> <IPdelservidor> <puertodelservidor>\n", argv[0]);
+#ifdef _WIN32
+        WSACleanup();
+#endif
         return 1;
     }
     
@@ -50,22 +81,35 @@ int main(int argc, char *argv[]) {
     // Crear socket TCP
     if ((g_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Error al crear socket");
+#ifdef _WIN32
+        WSACleanup();
+#endif
         return 1;
     }
     
     // Configurar dirección del servidor
+    memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(atoi(argv[3]));
     
     // Convertir la IP de texto a formato binario
+    // Requiere _WIN32_WINNT >= 0x0600
     if (inet_pton(AF_INET, argv[2], &serv_addr.sin_addr) <= 0) {
         perror("Dirección inválida o no soportada");
+        close(g_socket);
+#ifdef _WIN32
+        WSACleanup();
+#endif
         return 1;
     }
     
     // Conectar al servidor
     if (connect(g_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         perror("Error al conectar al servidor");
+        close(g_socket);
+#ifdef _WIN32
+        WSACleanup();
+#endif
         return 1;
     }
     
@@ -79,6 +123,9 @@ int main(int argc, char *argv[]) {
     if (pthread_create(&recv_thread, NULL, receive_messages, NULL) != 0) {
         perror("Error al crear el hilo de recepción");
         close(g_socket);
+#ifdef _WIN32
+        WSACleanup();
+#endif
         return 1;
     }
     pthread_detach(recv_thread); // El hilo se ejecuta de forma independiente
@@ -100,6 +147,11 @@ int main(int argc, char *argv[]) {
     // Desconexión limpia
     disconnect_client();
     close(g_socket);
+
+#ifdef _WIN32
+    WSACleanup();
+#endif
+
     return 0;
 }
 
@@ -109,6 +161,9 @@ void sigint_handler(int sig) {
     printf("\nSe recibió SIGINT. Cerrando conexión...\n");
     disconnect_client();
     close(g_socket);
+#ifdef _WIN32
+    WSACleanup();
+#endif
     exit(0);
 }
 
@@ -322,11 +377,11 @@ void display_help() {
     printf("\n=== COMANDOS DISPONIBLES ===\n");
     printf("/broadcast <mensaje>    - Enviar mensaje a todos los usuarios\n");
     printf("/dm <usuario> <mensaje> - Enviar mensaje directo a un usuario\n");
-    printf("/list                 - Mostrar lista de usuarios conectados\n");
-    printf("/info <usuario>       - Mostrar información de un usuario\n");
-    printf("/status <0|1|2>        - Cambiar estado (0: ACTIVO, 1: OCUPADO, 2: INACTIVO)\n");
-    printf("/help                 - Mostrar esta ayuda\n");
-    printf("/exit                 - Salir del chat\n");
+    printf("/list                   - Mostrar lista de usuarios conectados\n");
+    printf("/info <usuario>         - Mostrar información de un usuario\n");
+    printf("/status <0|1|2>         - Cambiar estado (0: ACTIVO, 1: OCUPADO, 2: INACTIVO)\n");
+    printf("/help                   - Mostrar esta ayuda\n");
+    printf("/exit                   - Salir del chat\n");
     printf("===========================\n");
 }
 
@@ -362,11 +417,11 @@ void handle_command(const char *input) {
             printf("Uso: /dm <usuario> <mensaje>\n");
             return;
         }
-        int len = space - remain;
+        int len = (int)(space - remain);
         strncpy(recipient, remain, len);
         recipient[len] = '\0';
-        const char *message = space + 1;
-        send_direct_message(recipient, message);
+        const char *msg = space + 1;
+        send_direct_message(recipient, msg);
         return;
     }
     
