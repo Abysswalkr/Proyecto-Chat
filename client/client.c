@@ -189,9 +189,10 @@ void *receive_messages(void *arg) {
             continue;
         }
         
-        // Se verifica si se trata de una respuesta (OK o ERROR) o de una acción
+        // Se verifica si se trata de una respuesta (OK o ERROR), de una acción o de un tipo específico
         cJSON *respuesta = cJSON_GetObjectItemCaseSensitive(json, "respuesta");
         cJSON *accion = cJSON_GetObjectItemCaseSensitive(json, "accion");
+        cJSON *tipo = cJSON_GetObjectItemCaseSensitive(json, "tipo");
         
         if (respuesta && cJSON_IsString(respuesta)) {
             if (strcmp(respuesta->valuestring, "OK") == 0) {
@@ -225,6 +226,37 @@ void *receive_messages(void *arg) {
                         if (cJSON_IsString(usuario))
                             printf("- %s\n", usuario->valuestring);
                     }
+                }
+            }
+        } else if (tipo && cJSON_IsString(tipo)) {
+            // Procesar tipos específicos de mensajes
+            if (strcmp(tipo->valuestring, "MOSTRAR") == 0) {
+                // Procesar información de usuario
+                cJSON *usuario = cJSON_GetObjectItemCaseSensitive(json, "usuario");
+                cJSON *direccionIP = cJSON_GetObjectItemCaseSensitive(json, "direccionIP");
+                cJSON *estado = cJSON_GetObjectItemCaseSensitive(json, "estado");
+                
+                if (usuario && direccionIP && estado && 
+                    cJSON_IsString(usuario) && cJSON_IsString(direccionIP) && cJSON_IsString(estado)) {
+                    printf("\nInformación de usuario:\n");
+                    printf("Usuario: %s\n", usuario->valuestring);
+                    printf("IP: %s\n", direccionIP->valuestring);
+                    printf("Estado: %s\n", estado->valuestring);
+                }
+            } else if (strcmp(tipo->valuestring, "ESTADO") == 0) {
+                // Procesar cambio de estado
+                cJSON *usuario = cJSON_GetObjectItemCaseSensitive(json, "usuario");
+                cJSON *estado = cJSON_GetObjectItemCaseSensitive(json, "estado");
+                
+                if (usuario && estado && cJSON_IsString(usuario) && cJSON_IsString(estado)) {
+                    printf("\nUsuario %s cambió su estado a: %s\n", usuario->valuestring, estado->valuestring);
+                }
+            } else if (strcmp(tipo->valuestring, "SERVER_SHUTDOWN") == 0) {
+                // Procesar cierre del servidor
+                cJSON *mensaje = cJSON_GetObjectItemCaseSensitive(json, "mensaje");
+                if (mensaje && cJSON_IsString(mensaje)) {
+                    printf("\n[SERVIDOR]: %s\n", mensaje->valuestring);
+                    g_connected = 0; // Marcar como desconectado
                 }
             }
         }
