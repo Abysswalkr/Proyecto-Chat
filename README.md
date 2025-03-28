@@ -1,8 +1,3 @@
-A continuación se muestra un ejemplo actualizado del README.md que refleja las modificaciones realizadas para que el proyecto se compile y ejecute en Windows, incluyendo las instrucciones para compilar, ejecutar y conectar a los usuarios.
-
----
-
-```markdown
 # Proyecto de Chat - Versión Windows
 
 Este proyecto de chat implementa un sistema de mensajería en C utilizando sockets, multithreading y JSON para la comunicación entre clientes y el servidor. Se han realizado modificaciones para que el proyecto se compile y ejecute nativamente en Windows usando MinGW, Winsock y pthreads (para Windows).
@@ -146,12 +141,4 @@ Una vez conectados, los usuarios pueden interactuar utilizando comandos:
 - Asegúrate de tener instaladas todas las dependencias (MinGW, cJSON, pthreads para Windows).  
 - Si usas VS Code, abre la carpeta del proyecto y utiliza las configuraciones de `.vscode` para compilar y depurar.  
 - Los comandos para compilar y ejecutar se deben correr desde la carpeta donde se encuentran los archivos fuente.
-
-Con estos pasos, tu proyecto de chat se podrá compilar y ejecutar en Windows sin necesidad de una máquina virtual.
-
----
-
-```
-
-Este README actualizado refleja todos los cambios realizados para la compilación y ejecución en Windows, junto con los comandos necesarios y la estructura del proyecto.
 
