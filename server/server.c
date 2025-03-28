@@ -405,10 +405,11 @@ int register_user(const char *username, const char *ip, int socket) {
     
     pthread_mutex_lock(&users_mutex);
     
-    // Verificar si el nombre o IP ya existen
+    // Verificar si el nombre de usuario ya existe
     for (int i = 0; i < user_count; i++) {
-        if (strcmp(users[i].username, username) == 0 || strcmp(users[i].ip, ip) == 0) {
-            result = 1; // Error, ya existe
+        if (strcmp(users[i].username, username) == 0) {
+            result = 1; // Error, nombre de usuario ya existe
+            printf("Rechazo de registro: Nombre de usuario '%s' ya existe\n", username);
             break;
         }
     }
@@ -416,7 +417,11 @@ int register_user(const char *username, const char *ip, int socket) {
     // Si no existe, agregarlo
     if (result == 0 && user_count < MAX_CLIENTS) {
         strncpy(users[user_count].username, username, sizeof(users[user_count].username) - 1);
+        users[user_count].username[sizeof(users[user_count].username) - 1] = '\0'; // Garantizar terminación
+        
         strncpy(users[user_count].ip, ip, sizeof(users[user_count].ip) - 1);
+        users[user_count].ip[sizeof(users[user_count].ip) - 1] = '\0'; // Garantizar terminación
+        
         users[user_count].socket = socket;
         users[user_count].status = 0; // ACTIVO
         users[user_count].last_activity = time(NULL);
@@ -424,6 +429,7 @@ int register_user(const char *username, const char *ip, int socket) {
         printf("Usuario registrado: %s (%s)\n", username, ip);
     } else if (user_count >= MAX_CLIENTS) {
         result = 1; // Error, máximo de clientes alcanzado
+        printf("Rechazo de registro: Máximo de clientes alcanzado\n");
     }
     
     pthread_mutex_unlock(&users_mutex);
